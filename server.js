@@ -7,12 +7,24 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// AgentMail config
-const AGENTMAIL_API_KEY = process.env.AGENTMAIL_API_KEY || 'am_us_inbox_ec1c165f585ed00f28e1a6d17a4ddf198193d215e4c7fa9d8bcc9f6c2b3275e7';
+// AgentMail config: credentials must be supplied through the process environment.
+const AGENTMAIL_API_KEY = process.env.AGENTMAIL_API_KEY || '';
 const AGENTMAIL_INBOX = process.env.AGENTMAIL_INBOX || 'mrbubba@agentmail.to';
 
-// Middleware
-app.use(cors());
+// Allow same-origin requests and explicit local/production origins only.
+const allowedOrigins = new Set(
+  (process.env.CONTACT_FORM_ORIGINS || 'https://rngbubba.github.io,http://localhost:3000')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin not allowed'));
+  }
+}));
+app.set('trust proxy', process.env.TRUST_PROXY === 'true');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
@@ -182,6 +194,10 @@ app.post('/api/submit', formLimiter, async (req, res) => {
     emailBody += `User-Agent: ${req.get('User-Agent')}\n`;
     emailBody += `Timestamp: ${new Date().toISOString()}\n`;
     
+    if (!AGENTMAIL_API_KEY) {
+      return res.status(503).json({ error: 'Contact service is not configured' });
+    }
+
     // Send via AgentMail
     const response = await axios.post(
       `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(AGENTMAIL_INBOX)}/messages/send`,
